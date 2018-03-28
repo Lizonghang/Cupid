@@ -1,0 +1,8 @@
+1 s1 A
+2 A E
+3 E B C D
+4 D d1
+5 s2 C
+6 C E
+7 E D A B
+8 B d2

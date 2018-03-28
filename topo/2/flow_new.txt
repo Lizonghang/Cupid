@@ -1,0 +1,2 @@
+1, s1 A E B C D d1
+2, s2 C G D A B d2
