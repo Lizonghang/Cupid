@@ -22,8 +22,13 @@ if __name__ == '__main__':
             else:
                 transition_info[fid].update({nf: flowinfo[fid]})
 
+    tmp_result = {}
+
+    count = 0
     while True:
-        print 'New Round'
+        count += 1
+        print 'Round', count
+        tmp_result[count] = []
 
         split_D = utils.split_dependency_graph(global_D)
 
@@ -32,42 +37,40 @@ if __name__ == '__main__':
             US = []
 
             # Critical node update without deadlocks:
-            while True:
-                CNids_with_no_outdegree = map(lambda i: i[0], filter(lambda i: i[1] == 0, D.out_degree()))
-                if not CNids_with_no_outdegree:
-                    break
+            US_ = []
+            step1_flag = False
 
-                US_ = []
-                for CNid in CNids_with_no_outdegree:
-                    nf_list = utils.map_id_to_CN(CNid)
+            CNids_with_no_outdegree = map(lambda i: i[0], filter(lambda i: i[1] == 0, D.out_degree()))
 
-                    for i in xrange(len(nf_list)):
-                        nf_dict = nf_list[i]
+            if not CNids_with_no_outdegree:
+                break
 
-                        if utils.has_dependency(D, nf_dict):
-                            continue
+            for CNid in CNids_with_no_outdegree:
+                nf_list = utils.map_id_to_CN(CNid)
 
-                        nf, fid = utils.dict2tuple(nf_dict)
+                for i in xrange(len(nf_list)):
+                    nf_dict = nf_list[i]
 
-                        if utils.can_update_in_segment(G, nf, fid, transition_info[fid][nf]):
-                            utils.update_segment(G, nf, fid, transition_info[fid][nf])
-                            US_.append((nf_dict, transition_info[fid][nf]))
-                            utils.remove_nf(global_D, nf_dict)
-                            utils.sync_subgraph(global_D, D)
-                            transition_info[fid][nf] = 0.0
+                    if utils.has_dependency(D, nf_dict):
+                        continue
 
-                if US_:
-                    US.append(US_)
-                else:
-                    break
+                    nf, fid = utils.dict2tuple(nf_dict)
+
+                    if utils.can_update_in_segment(G, nf, fid, transition_info[fid][nf]):
+                        utils.update_segment(G, nf, fid, transition_info[fid][nf])
+                        US_.append((nf_dict, transition_info[fid][nf]))
+                        utils.remove_nf(global_D, nf_dict)
+                        utils.sync_subgraph(global_D, D)
+                        transition_info[fid][nf] = 0.0
+
+            if US_:
+                US.append(US_)
+                step1_flag = True
 
             # Schedulable critical node update in deadlock
-            while True:
-
-                if not D.nodes():
-                    break
-
-                US_ = []
+            US_ = []
+            step2_flag = False
+            if not step1_flag:
                 nf_list = utils.get_all_nf(D)
 
                 record = []
@@ -89,63 +92,70 @@ if __name__ == '__main__':
 
                 if US_:
                     US.append(US_)
-                else:
-                    break
+                    step2_flag = True
 
             # Multipath Transition
-
-            handle_locks = []
-            for group in utils.find_deadlock(D):
-                if group:
-                    handle_locks.append(random.choice(group))
-
             US_ = []
-            for locks in handle_locks:
-                option = []
-                for nf, fid in locks:
-                    Pn = utils.get_path_to_next_critical_node(nf, fid, 'new')
-                    Po = utils.get_path_to_next_critical_node(nf, fid, 'old')
-                    En = utils.get_edges_on_path(Pn, with_weights=False)
-                    Eo = utils.get_edges_on_path(Po, with_weights=False)
+            if not step1_flag and not step2_flag:
+                handle_locks = []
+                for group in utils.find_deadlock(D):
+                    if group:
+                        handle_locks.append(random.choice(group))
 
-                    avail_bw = []
-                    for e in En:
-                        params = G[e[0]][e[1]]
-                        avail_bw.append(round(params['weight'] - params['bw'], 2))
-                    min_avail_bw = min(avail_bw)
+                for locks in handle_locks:
+                    option = []
+                    for nf, fid in locks:
+                        Pn = utils.get_path_to_next_critical_node(nf, fid, 'new')
+                        Po = utils.get_path_to_next_critical_node(nf, fid, 'old')
+                        En = utils.get_edges_on_path(Pn, with_weights=False)
+                        Eo = utils.get_edges_on_path(Po, with_weights=False)
 
-                    ab = min(transition_info[fid][nf], min_avail_bw)
+                        avail_bw = []
+                        for e in En:
+                            params = G[e[0]][e[1]]
+                            avail_bw.append(round(params['weight'] - params['bw'], 2))
+                        min_avail_bw = min(avail_bw)
 
-                    if ab > 0.0:
-                        option.append(((nf, fid), ab))
+                        ab = min(transition_info[fid][nf], min_avail_bw)
 
-                if option:
-                    option.sort(key=lambda tup: tup[1], reverse=True)
-                    update_nf_tup, ab = option[0]
-                    nf, fid = update_nf_tup
+                        if ab > 0.0:
+                            option.append(((nf, fid), ab))
 
-                    utils.update_segment(G, nf, fid, ab)
+                    if option:
+                        option.sort(key=lambda tup: tup[1], reverse=True)
+                        update_nf_tup, ab = option[0]
+                        nf, fid = update_nf_tup
 
-                    US_.append((utils.tuple2dict(update_nf_tup), ab))
+                        utils.update_segment(G, nf, fid, ab)
 
-                    transition_info[fid][nf] = round(transition_info[fid][nf] - ab, 2)
-                    if transition_info[fid][nf] == 0.0:
-                        locks.remove(update_nf_tup)
-                        nf_dict = utils.tuple2dict(update_nf_tup)
-                        utils.remove_nf(global_D, nf_dict)
-                        utils.sync_subgraph(global_D, D)
+                        US_.append((utils.tuple2dict(update_nf_tup), ab))
+
+                        transition_info[fid][nf] = round(transition_info[fid][nf] - ab, 2)
+                        if transition_info[fid][nf] == 0.0:
+                            locks.remove(update_nf_tup)
+                            nf_dict = utils.tuple2dict(update_nf_tup)
+                            utils.remove_nf(global_D, nf_dict)
+                            utils.sync_subgraph(global_D, D)
 
             if US_:
                 US.append(US_)
 
             print US,
+            tmp_result[count] += US
 
             if not D.nodes():
                 print 'end'
             else:
                 print
 
+        print
+
         if not global_D.nodes():
             break
 
-        print
+    result = {}
+    for r in tmp_result:
+        result[r] = []
+        for item in tmp_result[r]:
+            result[r] += item
+    print result
