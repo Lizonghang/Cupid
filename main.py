@@ -90,9 +90,9 @@ if __name__ == '__main__':
                         utils.sync_subgraph(global_D, D)
                         transition_info[fid][nf] = 0.0
 
-                if US_:
-                    US.append(US_)
-                    step2_flag = True
+            if US_:
+                US.append(US_)
+                step2_flag = True
 
             # Multipath Transition
             US_ = []
@@ -140,8 +140,9 @@ if __name__ == '__main__':
             if US_:
                 US.append(US_)
 
-            print US,
-            tmp_result[count] += US
+            if US:
+                print US,
+                tmp_result[count] += US
 
             if not D.nodes():
                 print 'end'
