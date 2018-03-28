@@ -439,6 +439,13 @@ def remove_nf(D, nf_, path='topo/dependency_map.txt'):
         fp.writelines(map_file)
 
 
+def sync_subgraph(global_D, D):
+    global_D_nodes = list(global_D.nodes())
+    for CNid in list(D.nodes()):
+        if CNid not in global_D_nodes:
+            D.remove_node(CNid)
+
+
 def has_dependency(D, nf):
     for CNid in map(lambda i: i[0], filter(lambda i: i[1] != 0, D.out_degree())):
         if nf in map_id_to_CN(CNid):
@@ -472,8 +479,16 @@ def tuple2dict(nf_tup):
     return {nf_tup[0]: nf_tup[1]}
 
 
+def has_intersection(arr1, arr2):
+    for nf_tup in arr1:
+        if nf_tup in arr2:
+            return True
+    return False
+
+
 def find_deadlock(D):
-    tmp_lock = []
+    subgraph = find_connected_subgraphs(D)
+    locks = []
 
     for nf_dict in get_all_nf(D):
         root = dict2tuple(nf_dict)
@@ -494,31 +509,29 @@ def find_deadlock(D):
                     record.append(d_node)
             queue.remove(nf_tup)
 
-        tmp_lock.append(list(nx.simple_cycles(T_nf)))
+        locks.append(list(nx.simple_cycles(T_nf)))
 
-    deadlock = []
-    for locks_of_nf in tmp_lock:
-        if not deadlock:
-            deadlock.append(locks_of_nf)
-            continue
-        # find intersection
-        index = -1
-        for locks_of_group in deadlock:
-            for lock in locks_of_nf:
-                if lock in locks_of_group:
-                    index = deadlock.index(locks_of_group)
+    deadlocks = []
+    for i in xrange(len(subgraph)):
+        deadlocks.append([])
+
+    for locks_of_nf in locks:
+        for lock in locks_of_nf:
+            flag = False
+            for nf in lock:
+                for subg in subgraph:
+                    if nf in subg:
+                        index = subgraph.index(subg)
+                        if lock not in deadlocks[index]:
+                            deadlocks[index].append(lock)
+                        flag = True
+                        break
+                if flag:
                     break
-            if index != -1:
-                break
-        # union or new
-        if index != -1:
-            for lock in locks_of_nf:
-                if lock not in deadlock[index]:
-                    deadlock[index].append(lock)
-        else:
-            deadlock.append(locks_of_nf)
+            if not flag:
+                raise ValueError("[ERROR] find lock not in any subgraph")
 
-    return deadlock
+    return deadlocks
 
 
 def is_nf_in_locks(nf, locks):
@@ -527,3 +540,76 @@ def is_nf_in_locks(nf, locks):
         if nf_tup in lock:
             return True
     return False
+
+
+def find_connected_subgraphs(D):
+    visible_map = {}
+    for nf_dict in get_all_nf(D):
+        root = dict2tuple(nf_dict)
+        T_nf = nx.DiGraph()
+        T_nf.add_node(root)
+
+        queue = [root]
+        record = [root]
+        while queue:
+            nf_tup = queue[0]
+            d_nodes = map(dict2tuple, find_dependency(D, tuple2dict(nf_tup)))
+            d_edges = map(lambda node: (nf_tup, node), d_nodes)
+            T_nf.add_edges_from(d_edges)
+
+            for d_node in d_nodes:
+                if d_node not in record:
+                    queue.append(d_node)
+                    record.append(d_node)
+            queue.remove(nf_tup)
+
+        visible_map[root] = list(T_nf.nodes())
+
+    roots = visible_map.keys()
+
+    # check if can merge
+    i, j = 0, 1
+    while i < len(roots) and j < len(roots):
+        if has_intersection(visible_map[roots[i]], visible_map[roots[j]]):
+            for nf_tup in visible_map[roots[j]]:
+                if nf_tup not in visible_map[roots[i]]:
+                    visible_map[roots[i]].append(nf_tup)
+            visible_map.pop(roots[j])
+            roots.remove(roots[j])
+        else:
+            j += 1
+
+        if j == len(roots):
+            i += 1
+            j = i + 1
+
+    return visible_map.values()
+
+
+def split_dependency_graph(D):
+    subgraph = find_connected_subgraphs(D)
+
+    subD_arr = []
+    for i in xrange(len(subgraph)):
+        subD_arr.append([])
+
+    for CNid in D.nodes():
+        nf_tup = dict2tuple(map_id_to_CN(CNid)[0])
+        for subg in subgraph:
+            if nf_tup in subg:
+                subD_arr[subgraph.index(subg)].append(CNid)
+                break
+
+    split_D = []
+
+    for CNids in subD_arr:
+        subD = nx.DiGraph()
+        for CNid in CNids:
+            if not subD.has_node(CNid):
+                subD.add_node(CNid)
+            if D[CNid]:
+                next_CNid = D[CNid].keys()[0]
+                subD.add_edge(CNid, next_CNid)
+        split_D.append(subD)
+
+    return split_D
