@@ -1,8 +1,6 @@
 import utils
 import os
 import random
-import sys
-t = sys.exit
 
 os.system('python segment_partition.py')
 
@@ -30,8 +28,9 @@ if __name__ == '__main__':
         print 'Round', count
         tmp_result[count] = []
 
-        split_D = utils.split_dependency_graph(global_D)
+        die_flow = True
 
+        split_D = utils.split_dependency_graph(global_D)
         for D in split_D:
 
             US = []
@@ -41,9 +40,6 @@ if __name__ == '__main__':
             step1_flag = False
 
             CNids_with_no_outdegree = map(lambda i: i[0], filter(lambda i: i[1] == 0, D.out_degree()))
-
-            if not CNids_with_no_outdegree:
-                break
 
             for CNid in CNids_with_no_outdegree:
                 nf_list = utils.map_id_to_CN(CNid)
@@ -66,6 +62,7 @@ if __name__ == '__main__':
             if US_:
                 US.append(US_)
                 step1_flag = True
+                die_flow = False
 
             # Schedulable critical node update in deadlock
             US_ = []
@@ -93,65 +90,81 @@ if __name__ == '__main__':
             if US_:
                 US.append(US_)
                 step2_flag = True
+                die_flow = False
 
             # Multipath Transition
             US_ = []
             if not step1_flag and not step2_flag:
-                handle_locks = []
                 for group in utils.find_deadlock(D):
-                    if group:
-                        handle_locks.append(random.choice(group))
+                    random.shuffle(group)
+                    for lock in group:
+                        option = []
+                        for nf, fid in lock:
+                            Pn = utils.get_path_to_next_critical_node(nf, fid, 'new')
+                            Po = utils.get_path_to_next_critical_node(nf, fid, 'old')
+                            En = utils.get_edges_on_path(Pn, with_weights=False)
+                            Eo = utils.get_edges_on_path(Po, with_weights=False)
 
-                for locks in handle_locks:
-                    option = []
-                    for nf, fid in locks:
-                        Pn = utils.get_path_to_next_critical_node(nf, fid, 'new')
-                        Po = utils.get_path_to_next_critical_node(nf, fid, 'old')
-                        En = utils.get_edges_on_path(Pn, with_weights=False)
-                        Eo = utils.get_edges_on_path(Po, with_weights=False)
+                            avail_bw = []
+                            for e in En:
+                                params = G[e[0]][e[1]]
+                                avail_bw.append(round(params['weight'] - params['bw'], 2))
+                            min_avail_bw = min(avail_bw)
 
-                        avail_bw = []
-                        for e in En:
-                            params = G[e[0]][e[1]]
-                            avail_bw.append(round(params['weight'] - params['bw'], 2))
-                        min_avail_bw = min(avail_bw)
+                            ab = min(transition_info[fid][nf], min_avail_bw)
 
-                        ab = min(transition_info[fid][nf], min_avail_bw)
+                            if ab > 0.0:
+                                option.append(((nf, fid), ab))
 
-                        if ab > 0.0:
-                            option.append(((nf, fid), ab))
+                        if option:
+                            option.sort(key=lambda tup: tup[1], reverse=True)
+                            update_nf_tup, ab = option[0]
+                            nf, fid = update_nf_tup
 
-                    if option:
-                        option.sort(key=lambda tup: tup[1], reverse=True)
-                        update_nf_tup, ab = option[0]
-                        nf, fid = update_nf_tup
+                            utils.update_segment(G, nf, fid, ab)
 
-                        utils.update_segment(G, nf, fid, ab)
+                            US_.append((utils.tuple2dict(update_nf_tup), ab))
 
-                        US_.append((utils.tuple2dict(update_nf_tup), ab))
-
-                        transition_info[fid][nf] = round(transition_info[fid][nf] - ab, 2)
-                        if transition_info[fid][nf] == 0.0:
-                            locks.remove(update_nf_tup)
-                            nf_dict = utils.tuple2dict(update_nf_tup)
-                            utils.remove_nf(global_D, nf_dict)
-                            utils.sync_subgraph(global_D, D)
+                            transition_info[fid][nf] = round(transition_info[fid][nf] - ab, 2)
+                            if transition_info[fid][nf] == 0.0:
+                                lock.remove(update_nf_tup)
+                                nf_dict = utils.tuple2dict(update_nf_tup)
+                                utils.remove_nf(global_D, nf_dict)
+                                utils.sync_subgraph(global_D, D)
+                            break
 
             if US_:
                 US.append(US_)
+                die_flow = False
 
             if US:
-                print US,
+                print US
                 tmp_result[count] += US
 
-            if not D.nodes():
-                print 'end'
-            else:
-                print
-
-        print
-
         if not global_D.nodes():
+            break
+
+        if count >= 10 or die_flow:
+            rest_nf = utils.get_all_nf(global_D)
+            print
+            print 'force move:', rest_nf
+
+            for nf_dict in rest_nf:
+                nf, fid = utils.dict2tuple(nf_dict)
+                utils.update_segment(G, nf, fid, transition_info[fid][nf])
+                utils.remove_nf(global_D, nf_dict)
+                transition_info[fid][nf] = 0.0
+
+            overload_map = {}
+            for e in G.edges():
+                params = G[e[0]][e[1]]
+                if params['bw'] > params['weight']:
+                    overload_map[e] = round(round(params['bw'] - params['weight'], 2) / params['weight'], 2)
+
+            print
+            print 'overload map:'
+            print overload_map
+
             break
 
     result = {}
@@ -159,4 +172,6 @@ if __name__ == '__main__':
         result[r] = []
         for item in tmp_result[r]:
             result[r] += item
+    print
+    print 'update order:'
     print result

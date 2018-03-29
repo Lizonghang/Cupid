@@ -7,7 +7,7 @@ def add_nodes_from_file(G_, path='topo/nodes.txt'):
         G_.add_nodes_from(nodes_list)
 
 
-def add_edges_from_file(G_, path='topo/edges.txt'):
+def add_edges_from_file(G_, path='topo/link_capacity.txt'):
     edge_list = []
     with open(path) as fp:
         line = fp.readline().strip()
@@ -19,12 +19,12 @@ def add_edges_from_file(G_, path='topo/edges.txt'):
     G_.add_weighted_edges_from(edge_list)
 
 
-def get_flowinfo(path='topo/flowinfo.txt'):
+def get_flowinfo(path='topo/flow_demand.txt'):
     flowinfo = {}
     with open(path) as fp:
         line = fp.readline().strip()
         while line:
-            items = line.split()
+            items = map(lambda _: _.strip(), line.split(','))
             fid = int(items[0])
             bw = float(items[1])
             flowinfo[fid] = bw
@@ -34,12 +34,12 @@ def get_flowinfo(path='topo/flowinfo.txt'):
 
 def get_flow(fid, version):
     assert version in ['new', 'old']
-    with open('topo/flow_%s.txt' % version) as fp:
+    with open('topo/%sflow.txt' % version) as fp:
         line = fp.readline().strip()
         while line:
-            items = line.split(',')
+            items = map(lambda _: _.strip(), line.split(','))
             if fid == int(items[0]):
-                return items[1].strip().split()
+                return items[1].split()
             line = fp.readline().strip()
 
 
@@ -52,7 +52,7 @@ def get_edges_on_path(P, with_weights=False):
         return edges
 
     edges_with_weights = []
-    with open('topo/edges.txt') as fp:
+    with open('topo/link_capacity.txt') as fp:
         for e in edges:
             fp.seek(0)
             flag = False
@@ -226,7 +226,6 @@ def find_nf(fid, version, l):
     while nf and nf not in critical_nodes:
         nf = get_predecessor(G_, nf)
 
-    assert nf is not None
     return nf
 
 
@@ -240,11 +239,15 @@ def get_dependency(CL):
         CN_Fn_l = []
         CN_Fo_l = []
         for fid in Fn:
-            CN_Fn_l.append({find_nf(fid, 'new', l): fid})
+            nf = find_nf(fid, 'new', l)
+            if nf:
+                CN_Fn_l.append({nf: fid})
         for fid in Fo:
-            CN_Fo_l.append({find_nf(fid, 'old', l): fid})
-
-        D_.append((CN_Fn_l, CN_Fo_l))
+            nf = find_nf(fid, 'old', l)
+            if nf:
+                CN_Fo_l.append({find_nf(fid, 'old', l): fid})
+        if CN_Fn_l and CN_Fo_l:
+            D_.append((CN_Fn_l, CN_Fo_l))
 
     D = []
     for d in D_:
@@ -301,15 +304,15 @@ def draw_graph_with_bw(G):
     import matplotlib.pyplot as plt
     edge_labels = {}
     for e in G.edges():
-        edge_labels[e] = G[e[0]][e[1]]['bw']
+        edge_labels[e] = str(G[e[0]][e[1]]['bw']) + str(G[e[0]][e[1]]['weight'])
     nx.draw(G, pos=nx.spectral_layout(G), with_labels=True)
     nx.draw_networkx_edge_labels(G, pos=nx.spectral_layout(G), font_size=5, edge_labels=edge_labels)
     plt.show()
 
 
-def draw_graph(G):
+def draw_graph(G, layout=nx.spring_layout):
     import matplotlib.pyplot as plt
-    nx.draw(G, pos=nx.spring_layout(G), with_labels=True)
+    nx.draw(G, pos=layout(G), with_labels=True)
     plt.show()
 
 
@@ -490,24 +493,31 @@ def find_deadlock(D):
     subgraph = find_connected_subgraphs(D)
     locks = []
 
-    for nf_dict in get_all_nf(D):
+    all_nf = get_all_nf(D)
+    dependency_map = {}
+    for nf_dict in all_nf:
+        dependency_map[dict2tuple(nf_dict)] = find_dependency(D, nf_dict)
+
+    for nf_dict in all_nf:
         root = dict2tuple(nf_dict)
         T_nf = nx.DiGraph()
         T_nf.add_node(root)
 
         queue = [root]
         record = [root]
+
         while queue:
             nf_tup = queue[0]
-            d_nodes = map(dict2tuple, find_dependency(D, tuple2dict(nf_tup)))
-            d_edges = map(lambda node: (nf_tup, node), d_nodes)
-            T_nf.add_edges_from(d_edges)
+            d_nodes = map(dict2tuple, dependency_map[nf_tup])
 
             for d_node in d_nodes:
                 if d_node not in record:
                     queue.append(d_node)
                     record.append(d_node)
-            queue.remove(nf_tup)
+                    T_nf.add_edge(nf_tup, d_node)
+                elif d_node == root:
+                    T_nf.add_edge(nf_tup, d_node)
+            queue.pop(0)
 
         locks.append(list(nx.simple_cycles(T_nf)))
 
@@ -543,27 +553,27 @@ def is_nf_in_locks(nf, locks):
 
 
 def find_connected_subgraphs(D):
+    all_nf = get_all_nf(D)
+    dependency_map = {}
+    for nf_dict in all_nf:
+        dependency_map[dict2tuple(nf_dict)] = find_dependency(D, nf_dict)
+
     visible_map = {}
-    for nf_dict in get_all_nf(D):
+    for nf_dict in all_nf:
         root = dict2tuple(nf_dict)
-        T_nf = nx.DiGraph()
-        T_nf.add_node(root)
 
         queue = [root]
         record = [root]
         while queue:
             nf_tup = queue[0]
-            d_nodes = map(dict2tuple, find_dependency(D, tuple2dict(nf_tup)))
-            d_edges = map(lambda node: (nf_tup, node), d_nodes)
-            T_nf.add_edges_from(d_edges)
-
+            d_nodes = map(dict2tuple, dependency_map[nf_tup])
             for d_node in d_nodes:
                 if d_node not in record:
                     queue.append(d_node)
                     record.append(d_node)
-            queue.remove(nf_tup)
+            queue.pop(0)
 
-        visible_map[root] = list(T_nf.nodes())
+        visible_map[root] = record
 
     roots = visible_map.keys()
 
