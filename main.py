@@ -22,6 +22,7 @@ if __name__ == '__main__':
                 transition_info[fid].update({nf: flowinfo[fid]})
 
     tmp_result = {}
+    rest_nf = None
 
     count = 0
     while True:
@@ -182,9 +183,10 @@ if __name__ == '__main__':
             nf, fid = utils.dict2tuple(nf_tup[0])
             complete_round_map[fid] = r
 
-    for nf_dict in rest_nf:
-        nf, fid = utils.dict2tuple(nf_dict)
-        complete_round_map[fid] = max(result.keys()) + 1
+    if rest_nf:
+        for nf_dict in rest_nf:
+            nf, fid = utils.dict2tuple(nf_dict)
+            complete_round_map[fid] = max(result.keys()) + 1
 
     utils.save_complete_round(complete_round_map)
 
