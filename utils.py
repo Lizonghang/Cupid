@@ -389,6 +389,19 @@ def update_segment(G, nf, fid, size):
         params['bw'] += size
 
 
+def update_segment_without_moving_out(G, nf, fid, size):
+    Pn = get_path_to_next_critical_node(nf, fid, 'new')
+
+    if not Pn:
+        return
+
+    En = get_edges_on_path(Pn, with_weights=False)
+
+    for e in En:
+        params = G[e[0]][e[1]]
+        params['bw'] += size
+
+
 def update_alone_nodes(G, D):
     nodes_in_dependency_graph = get_nodes_in_dependency_graph(D)
     flowinfo = get_flowinfo()
@@ -589,3 +602,9 @@ def split_dependency_graph(D):
         split_D.append(subD)
 
     return split_D
+
+
+def save_complete_round(complete_round, path='topo/round.txt'):
+    with open(path, 'w') as fp:
+        for fid in complete_round:
+            fp.write(str(fid) + ',' + str(complete_round[fid]) + '\n')

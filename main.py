@@ -3,7 +3,7 @@ import os
 
 os.system('python segment_partition.py')
 
-MAX_ROUND = 50
+MAX_ROUND = 10
 
 if __name__ == '__main__':
     G = utils.create_network_topo_with_old_flows()
@@ -142,15 +142,18 @@ if __name__ == '__main__':
             print
             print 'force move:', rest_nf
 
+            overload_map = {}
+            overload_G = G.copy()
+
             for nf_dict in rest_nf:
                 nf, fid = utils.dict2tuple(nf_dict)
                 utils.update_segment(G, nf, fid, transition_info[fid][nf])
                 utils.remove_nf(global_D, nf_dict)
+                utils.update_segment_without_moving_out(overload_G, nf, fid, transition_info[fid][nf])
                 transition_info[fid][nf] = 0.0
 
-            overload_map = {}
-            for e in G.edges():
-                params = G[e[0]][e[1]]
+            for e in overload_G.edges():
+                params = overload_G[e[0]][e[1]]
                 if params['bw'] > params['weight']:
                     overload_map[e] = round(round(params['bw'] - params['weight'], 2) / params['weight'], 2)
 
@@ -165,7 +168,26 @@ if __name__ == '__main__':
     for r in tmp_result:
         result[r] = []
         for item in tmp_result[r]:
-            result[r] += item
+            result[r].append(item)
     print
     print 'update order:'
     print result
+
+    complete_round_map = {}
+    for fid in flowinfo:
+        complete_round_map[fid] = 0
+
+    for r in result:
+        for nf_tup in result[r]:
+            nf, fid = utils.dict2tuple(nf_tup[0])
+            complete_round_map[fid] = r
+
+    for nf_dict in rest_nf:
+        nf, fid = utils.dict2tuple(nf_dict)
+        complete_round_map[fid] = max(result.keys()) + 1
+
+    utils.save_complete_round(complete_round_map)
+
+    print
+    print 'complete round:'
+    print complete_round_map
