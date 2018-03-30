@@ -333,7 +333,7 @@ def map_segmentid_to_segments(segmentid, path='topo/segmentid_segment_map.txt'):
         while line:
             items = line.split()
             if segmentid == int(items[0]):
-                return (items[1], items[2])
+                return items[1], items[2]
             line = fp.readline().strip()
 
 
@@ -442,13 +442,6 @@ def remove_nf(D, nf_, path='topo/dependency_map.txt'):
         fp.writelines(map_file)
 
 
-def sync_subgraph(global_D, D):
-    global_D_nodes = list(global_D.nodes())
-    for CNid in list(D.nodes()):
-        if CNid not in global_D_nodes:
-            D.remove_node(CNid)
-
-
 def has_dependency(D, nf):
     for CNid in map(lambda i: i[0], filter(lambda i: i[1] != 0, D.out_degree())):
         if nf in map_id_to_CN(CNid):
@@ -523,14 +516,6 @@ def find_deadlock(D):
                 locks.append(lock)
 
     return locks
-
-
-def is_nf_in_locks(nf, locks):
-    nf_tup = dict2tuple(nf)
-    for lock in locks:
-        if nf_tup in lock:
-            return True
-    return False
 
 
 def find_connected_subgraphs(D):
