@@ -490,7 +490,6 @@ def has_intersection(arr1, arr2):
 
 
 def find_deadlock(D):
-    subgraph = find_connected_subgraphs(D)
     locks = []
 
     all_nf = get_all_nf(D)
@@ -519,29 +518,11 @@ def find_deadlock(D):
                     T_nf.add_edge(nf_tup, d_node)
             queue.pop(0)
 
-        locks.append(list(nx.simple_cycles(T_nf)))
+        for lock in list(nx.simple_cycles(T_nf)):
+            if lock not in locks:
+                locks.append(lock)
 
-    deadlocks = []
-    for i in xrange(len(subgraph)):
-        deadlocks.append([])
-
-    for locks_of_nf in locks:
-        for lock in locks_of_nf:
-            flag = False
-            for nf in lock:
-                for subg in subgraph:
-                    if nf in subg:
-                        index = subgraph.index(subg)
-                        if lock not in deadlocks[index]:
-                            deadlocks[index].append(lock)
-                        flag = True
-                        break
-                if flag:
-                    break
-            if not flag:
-                raise ValueError("[ERROR] find lock not in any subgraph")
-
-    return deadlocks
+    return locks
 
 
 def is_nf_in_locks(nf, locks):
