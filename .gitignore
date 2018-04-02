@@ -3,3 +3,4 @@
 *.pyc
 topo/*.txt
 topo/*.png
+reformat_data.py
