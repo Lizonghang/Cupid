@@ -245,7 +245,7 @@ def get_dependency(CL):
         for fid in Fo:
             nf = find_nf(fid, 'old', l)
             if nf:
-                CN_Fo_l.append({find_nf(fid, 'old', l): fid})
+                CN_Fo_l.append({nf: fid})
         if CN_Fn_l and CN_Fo_l:
             D_.append((CN_Fn_l, CN_Fo_l))
 
