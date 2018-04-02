@@ -142,6 +142,7 @@ if __name__ == '__main__':
             rest_nf = utils.get_all_nf(global_D)
             print
             print 'force move:', rest_nf
+            tmp_result[count+1] = []
 
             overload_map = {}
             overload_G = G.copy()
@@ -151,6 +152,7 @@ if __name__ == '__main__':
                 utils.update_segment(G, nf, fid, transition_info[fid][nf])
                 utils.remove_nf(global_D, nf_dict)
                 utils.update_segment_without_moving_out(overload_G, nf, fid, transition_info[fid][nf])
+                tmp_result[count+1].append((nf_dict, transition_info[fid][nf]))
                 transition_info[fid][nf] = 0.0
 
             for e in overload_G.edges():
@@ -170,6 +172,17 @@ if __name__ == '__main__':
         result[r] = []
         for item in tmp_result[r]:
             result[r].append(item)
+
+    print
+    print 'Round', '\t', 'State', '\t', 'Num', '\t', 'FlowSize'
+    for r in result:
+        print r, '\t',
+        if r == count + 1:
+            print 'force', '\t',
+        else:
+            print '\t',
+        print len(result[r]), '\t', sum([item[1] for item in result[r]])
+
     print
     print 'update order:'
     print result
@@ -182,11 +195,6 @@ if __name__ == '__main__':
         for nf_tup in result[r]:
             nf, fid = utils.dict2tuple(nf_tup[0])
             complete_round_map[fid] = r
-
-    if rest_nf:
-        for nf_dict in rest_nf:
-            nf, fid = utils.dict2tuple(nf_dict)
-            complete_round_map[fid] = max(result.keys()) + 1
 
     utils.save_complete_round(complete_round_map)
 
