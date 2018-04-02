@@ -101,7 +101,7 @@ if __name__ == '__main__':
                 utils.remove_flow(G, fid, transition_info[fid][nf])
                 shield.append((nf_dict, transition_info[fid][nf]))
 
-                print 'shield {}'.format(fid)
+                print 'shield:', nf_dict
                 tmp_result[count] = (fid, transition_info[fid][nf])
 
         if not global_D.nodes() or count >= MAX_ROUND:
