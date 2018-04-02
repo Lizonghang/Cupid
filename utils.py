@@ -105,36 +105,6 @@ def get_edges_in_circle(cycle):
     return edges
 
 
-def in_circle(cycles, e):
-    for cycle in cycles:
-        edges_on_cycle = get_edges_in_circle(cycle)
-        if e in edges_on_cycle:
-            return True
-    return False
-
-
-def get_successor(G_, n):
-    if not n:
-        return None
-
-    try:
-        m = list(G_.successors(n))[0]
-        return m
-    except IndexError:
-        return None
-
-
-def get_predecessor(G_, n):
-    if not n:
-        return None
-
-    try:
-        m = list(G_.predecessors(n))[0]
-        return m
-    except IndexError:
-        return None
-
-
 def create_network_topo():
     # get all flows
     flow_map = {}
@@ -276,7 +246,7 @@ def draw_graph_with_bw(G):
     import matplotlib.pyplot as plt
     edge_labels = {}
     for e in G.edges():
-        edge_labels[e] = str(G[e[0]][e[1]]['bw']) + str(G[e[0]][e[1]]['weight'])
+        edge_labels[e] = str(G[e[0]][e[1]]['bw']) + '/' + str(G[e[0]][e[1]]['weight'])
     nx.draw(G, pos=nx.spectral_layout(G), with_labels=True)
     nx.draw_networkx_edge_labels(G, pos=nx.spectral_layout(G), font_size=5, edge_labels=edge_labels)
     plt.show()
@@ -288,27 +258,6 @@ def draw_graph(G, layout=nx.spring_layout):
     plt.show()
 
 
-def get_segmentid(fid, path='topo/flow_segmentid_map.txt'):
-    with open(path) as fp:
-        line = fp.readline().strip()
-        while line:
-            items = line.split()
-            if fid == int(items[0]):
-                flow_segmentid = map(lambda item: int(item), items[1:])
-                return flow_segmentid
-            line = fp.readline().strip()
-
-
-def map_segmentid_to_segments(segmentid, path='topo/segmentid_segment_map.txt'):
-    with open(path) as fp:
-        line = fp.readline().strip()
-        while line:
-            items = line.split()
-            if segmentid == int(items[0]):
-                return items[1], items[2]
-            line = fp.readline().strip()
-
-
 def get_nodes_in_dependency_graph(D):
     nodes = []
     for CN_id in D.nodes():
@@ -316,33 +265,7 @@ def get_nodes_in_dependency_graph(D):
     return set(nodes)
 
 
-def get_path_to_next_critical_node(nf, fid, version):
-    critical_nodes = get_critical_nodes_on_flow(fid)
-    P = get_flow(fid, version)
-
-    path = [nf]
-
-    try:
-        i = P.index(nf) + 1
-    except ValueError:
-        return None
-
-    if i == len(P):
-        return None
-
-    while P[i] not in critical_nodes and i < len(P) - 1:
-        path.append(P[i])
-        i += 1
-
-    path.append(P[i])
-
-    if i == len(P):
-        return None
-    else:
-        return path
-
-
-def update_segment(G, s, fid, size):
+def update_segment(G, fid, size):
     Pn = get_flow(fid, 'new')
     Po = get_flow(fid, 'old')
 
@@ -361,34 +284,34 @@ def update_segment(G, s, fid, size):
         params['bw'] += size
 
 
-def update_segment_without_moving_out(G, nf, fid, size):
-    Pn = get_path_to_next_critical_node(nf, fid, 'new')
-
-    if not Pn:
-        return
-
+def recover_flow(G, fid, size):
+    Pn = get_flow(fid, 'new')
     En = get_edges_on_path(Pn, with_weights=False)
-
     for e in En:
         params = G[e[0]][e[1]]
         params['bw'] += size
+
+
+def remove_flow(G, fid, size):
+    Po = get_flow(fid, 'old')
+    Eo = get_edges_on_path(Po, with_weights=False)
+    for e in Eo:
+        params = G[e[0]][e[1]]
+        params['bw'] = round(params['bw'] - size, 2)
 
 
 def update_alone_nodes(G, D):
     nodes_in_dependency_graph = get_nodes_in_dependency_graph(D)
     flowinfo = get_flowinfo()
     for fid in flowinfo:
-        s =
-        nodes = set(get_flow(fid, 'new') + get_flow(fid, 'old'))
-        nodes = map(lambda nf: (nf, fid), nodes)
-        nodes = filter(lambda nf: nf not in nodes_in_dependency_graph, nodes)
-        for node in nodes:
-            update_segment(G, node[0], node[1], flowinfo[fid])
+        s = get_flow(fid, 'new')[0]
+        if (s, fid) not in nodes_in_dependency_graph:
+            update_segment(G, fid, flowinfo[fid])
 
 
-def can_update_in_segment(G, nf, fid, size):
+def can_update_in_segment(G, fid, size):
     G = G.copy()
-    update_segment(G, nf, fid, size)
+    update_segment(G, fid, size)
     for e in G.edges():
         params = G[e[0]][e[1]]
         if params['bw'] > params['weight']:
@@ -466,42 +389,6 @@ def has_intersection(arr1, arr2):
         if nf_tup in arr2:
             return True
     return False
-
-
-def find_deadlock(D):
-    locks = []
-
-    all_nf = get_all_nf(D)
-    dependency_map = {}
-    for nf_dict in all_nf:
-        dependency_map[dict2tuple(nf_dict)] = find_dependency(D, nf_dict)
-
-    for nf_dict in all_nf:
-        root = dict2tuple(nf_dict)
-        T_nf = nx.DiGraph()
-        T_nf.add_node(root)
-
-        queue = [root]
-        record = [root]
-
-        while queue:
-            nf_tup = queue[0]
-            d_nodes = map(dict2tuple, dependency_map[nf_tup])
-
-            for d_node in d_nodes:
-                if d_node not in record:
-                    queue.append(d_node)
-                    record.append(d_node)
-                    T_nf.add_edge(nf_tup, d_node)
-                elif d_node == root:
-                    T_nf.add_edge(nf_tup, d_node)
-            queue.pop(0)
-
-        for lock in list(nx.simple_cycles(T_nf)):
-            if lock not in locks:
-                locks.append(lock)
-
-    return locks
 
 
 def find_connected_subgraphs(D):

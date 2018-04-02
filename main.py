@@ -1,4 +1,5 @@
 import utils
+import random
 
 MAX_ROUND = 10
 
@@ -20,6 +21,7 @@ if __name__ == '__main__':
 
     tmp_result = {}
     rest_nf = None
+    shield = []
 
     count = 0
     while True:
@@ -27,14 +29,12 @@ if __name__ == '__main__':
         print 'Round', count
         tmp_result[count] = []
 
-        die_flow = True
-
         split_D = utils.split_dependency_graph(global_D)
         for D in split_D:
 
             US = []
 
-            # Critical node update without deadlocks:
+            # update without deadlocks:
             US_ = []
             step1_flag = False
 
@@ -51,8 +51,8 @@ if __name__ == '__main__':
 
                     nf, fid = utils.dict2tuple(nf_dict)
 
-                    if utils.can_update_in_segment(G, nf, fid, transition_info[fid][nf]):
-                        utils.update_segment(G, nf, fid, transition_info[fid][nf])
+                    if utils.can_update_in_segment(G, fid, transition_info[fid][nf]):
+                        utils.update_segment(G, fid, transition_info[fid][nf])
                         US_.append((nf_dict, transition_info[fid][nf]))
                         utils.remove_nf(global_D, nf_dict)
                         transition_info[fid][nf] = 0.0
@@ -60,9 +60,8 @@ if __name__ == '__main__':
             if US_:
                 US += US_
                 step1_flag = True
-                die_flow = False
 
-            # Schedulable critical node update in deadlock
+            # update in deadlock
             US_ = []
             step2_flag = False
             if not step1_flag:
@@ -71,15 +70,15 @@ if __name__ == '__main__':
                 record = []
                 for nf_dict in nf_list:
                     nf, fid = utils.dict2tuple(nf_dict)
-                    if utils.can_update_in_segment(G, nf, fid, transition_info[fid][nf]):
+                    if utils.can_update_in_segment(G, fid, transition_info[fid][nf]):
                         record.append((nf_dict, transition_info[fid][nf]))
 
                 record.sort(key=lambda x: x[1], reverse=True)
 
                 for nf_dict, size in record:
                     nf, fid = utils.dict2tuple(nf_dict)
-                    if utils.can_update_in_segment(G, nf, fid, size):
-                        utils.update_segment(G, nf, fid, size)
+                    if utils.can_update_in_segment(G, fid, size):
+                        utils.update_segment(G, fid, size)
                         US_.append((nf_dict, size))
                         utils.remove_nf(global_D, nf_dict)
                         transition_info[fid][nf] = 0.0
@@ -87,86 +86,58 @@ if __name__ == '__main__':
             if US_:
                 US += US_
                 step2_flag = True
-                die_flow = False
-
-            # Multipath Transition
-            US_ = []
-            if not step1_flag and not step2_flag:
-                locks = utils.find_deadlock(D)
-                option = []
-                for lock in locks:
-                    for nf, fid in lock:
-                        Pn = utils.get_path_to_next_critical_node(nf, fid, 'new')
-                        Po = utils.get_path_to_next_critical_node(nf, fid, 'old')
-                        En = utils.get_edges_on_path(Pn, with_weights=False)
-                        Eo = utils.get_edges_on_path(Po, with_weights=False)
-
-                        avail_bw = []
-                        for e in En:
-                            params = G[e[0]][e[1]]
-                            avail_bw.append(round(params['weight'] - params['bw'], 2))
-                        min_avail_bw = min(avail_bw)
-
-                        ab = min(transition_info[fid][nf], min_avail_bw)
-
-                        if ab > 0.0:
-                            option.append(((nf, fid), ab))
-
-                if option:
-                    option.sort(key=lambda tup: tup[1], reverse=True)
-                    update_nf_tup, ab = option[0]
-                    nf, fid = update_nf_tup
-
-                    utils.update_segment(G, nf, fid, ab)
-
-                    US_.append((utils.tuple2dict(update_nf_tup), ab))
-                    transition_info[fid][nf] = round(transition_info[fid][nf] - ab, 2)
-                    if transition_info[fid][nf] == 0.0:
-                        utils.remove_nf(global_D, utils.tuple2dict(update_nf_tup))
-
-            if US_:
-                US += US_
-                die_flow = False
 
             if US:
                 print US
                 tmp_result[count] += US
 
-        if not global_D.nodes():
-            break
-
-        if count >= MAX_ROUND or die_flow:
-            rest_nf = utils.get_all_nf(global_D)
-            print
-            print 'force move:', rest_nf
-
-            overload_map = {}
-            overload_G = G.copy()
-
-            for nf_dict in rest_nf:
+            # random shield
+            if not step1_flag and not step2_flag:
+                rest_nf = utils.get_all_nf(global_D)
+                nf_dict = random.choice(rest_nf)
                 nf, fid = utils.dict2tuple(nf_dict)
-                utils.update_segment(G, nf, fid, transition_info[fid][nf])
+
                 utils.remove_nf(global_D, nf_dict)
-                utils.update_segment_without_moving_out(overload_G, nf, fid, transition_info[fid][nf])
-                transition_info[fid][nf] = 0.0
+                utils.remove_flow(G, fid, transition_info[fid][nf])
+                shield.append((nf_dict, transition_info[fid][nf]))
 
-            for e in overload_G.edges():
-                params = overload_G[e[0]][e[1]]
-                if params['bw'] > params['weight']:
-                    overload_map[e] = round(round(params['bw'] - params['weight'], 2) / params['weight'], 2)
+                print 'shield {}'.format(fid)
+                tmp_result[count] = (fid, transition_info[fid][nf])
 
-            if overload_map:
-                print
-                print 'overload map:'
-                print overload_map
-
+        if not global_D.nodes() or count >= MAX_ROUND:
             break
+
+    if global_D.nodes():
+        rest_nf = utils.get_all_nf(global_D)
+        for nf_dict in rest_nf:
+            utils.remove_nf(global_D, nf_dict)
+            nf, fid = utils.dict2tuple(nf_dict)
+            utils.remove_flow(G, fid, transition_info[fid][nf])
+            shield.append((nf_dict, transition_info[fid][nf]))
+
+    if shield:
+        next_key = max(tmp_result.keys())+1
+        tmp_result[next_key] = {'recover': []}
+        for nf_dict, size in shield:
+            nf, fid = utils.dict2tuple(nf_dict)
+            utils.recover_flow(G, fid, size)
+            transition_info[fid][nf] = round(transition_info[fid][nf] - size, 2)
+            tmp_result[next_key]['recover'].append((fid, size))
+
+        print 'Rocover'
+        print shield
 
     result = {}
     for r in tmp_result:
         result[r] = []
-        for item in tmp_result[r]:
-            result[r].append(item)
+        if type(tmp_result[r]) == list:
+            for item in tmp_result[r]:
+                result[r].append(item)
+        elif type(tmp_result[r]) == tuple:
+            result[r] = {'shield': tmp_result[r]}
+        elif type(tmp_result[r]) == dict:
+            result[r] = tmp_result[r]
+
     print
     print 'update order:'
     print result
@@ -176,14 +147,15 @@ if __name__ == '__main__':
         complete_round_map[fid] = 0
 
     for r in result:
-        for nf_tup in result[r]:
-            nf, fid = utils.dict2tuple(nf_tup[0])
-            complete_round_map[fid] = r
-
-    if rest_nf:
-        for nf_dict in rest_nf:
-            nf, fid = utils.dict2tuple(nf_dict)
-            complete_round_map[fid] = max(result.keys()) + 1
+        if type(result[r]) == list:
+            for nf_tup in result[r]:
+                nf, fid = utils.dict2tuple(nf_tup[0])
+                complete_round_map[fid] = r
+        elif type(result[r]) == dict:
+            if result[r].has_key('recover'):
+                for item in result[r]['recover']:
+                    fid = item[0]
+                    complete_round_map[fid] = r
 
     utils.save_complete_round(complete_round_map)
 
