@@ -1,7 +1,4 @@
 import utils
-import os
-
-os.system('python segment_partition.py')
 
 MAX_ROUND = 10
 

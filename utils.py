@@ -96,19 +96,6 @@ def create_flow_graph(fid, split=False, with_weights=False):
         return temp_G
 
 
-def get_critical_nodes_on_flow(fid):
-    Pn = get_flow(fid, 'new')
-    G_ = create_flow_graph(fid, split=False, with_weights=False)
-
-    # return nodes which in-degree or out-degree is 2
-    critical_nodes = []
-    for node in Pn:
-        if G_.in_degree(node) == 2 or G_.out_degree(node) == 2:
-            critical_nodes.append(node)
-
-    return critical_nodes
-
-
 def get_edges_in_circle(cycle):
     edges = []
     for i in xrange(len(cycle)):
@@ -216,19 +203,6 @@ def get_flows_through_l(l, version):
     return Fl
 
 
-def find_nf(fid, version, l):
-    Gn, Go = create_flow_graph(fid, split=True, with_weights=False)
-    critical_nodes = get_critical_nodes_on_flow(fid)
-
-    G_ = Gn if version == 'new' else Go
-
-    nf = l[0]
-    while nf and nf not in critical_nodes:
-        nf = get_predecessor(G_, nf)
-
-    return nf
-
-
 def get_dependency(CL):
     D_ = []
 
@@ -239,13 +213,11 @@ def get_dependency(CL):
         CN_Fn_l = []
         CN_Fo_l = []
         for fid in Fn:
-            nf = find_nf(fid, 'new', l)
-            if nf:
-                CN_Fn_l.append({nf: fid})
+            s = get_flow(fid, 'new')[0]
+            CN_Fn_l.append({s: fid})
         for fid in Fo:
-            nf = find_nf(fid, 'old', l)
-            if nf:
-                CN_Fo_l.append({find_nf(fid, 'old', l): fid})
+            s = get_flow(fid, 'old')[0]
+            CN_Fo_l.append({s: fid})
         if CN_Fn_l and CN_Fo_l:
             D_.append((CN_Fn_l, CN_Fo_l))
 
@@ -370,9 +342,9 @@ def get_path_to_next_critical_node(nf, fid, version):
         return path
 
 
-def update_segment(G, nf, fid, size):
-    Pn = get_path_to_next_critical_node(nf, fid, 'new')
-    Po = get_path_to_next_critical_node(nf, fid, 'old')
+def update_segment(G, s, fid, size):
+    Pn = get_flow(fid, 'new')
+    Po = get_flow(fid, 'old')
 
     if not Pn or not Po:
         return
@@ -406,6 +378,7 @@ def update_alone_nodes(G, D):
     nodes_in_dependency_graph = get_nodes_in_dependency_graph(D)
     flowinfo = get_flowinfo()
     for fid in flowinfo:
+        s =
         nodes = set(get_flow(fid, 'new') + get_flow(fid, 'old'))
         nodes = map(lambda nf: (nf, fid), nodes)
         nodes = filter(lambda nf: nf not in nodes_in_dependency_graph, nodes)
