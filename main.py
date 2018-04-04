@@ -1,7 +1,7 @@
 import utils
 import random
 
-MAX_ROUND = 10
+MAX_ROUND = 3
 
 if __name__ == '__main__':
     G = utils.create_network_topo_with_old_flows()
@@ -96,7 +96,10 @@ if __name__ == '__main__':
 
             if US:
                 print US
-                result[count]['update'] = US
+                if result[count].has_key('update'):
+                    result[count]['update'] += US
+                else:
+                    result[count]['update'] = US
 
             # random shield
             if not step1_flag and not step2_flag:
@@ -142,6 +145,10 @@ if __name__ == '__main__':
         print 'Rocover'
         print shield
 
+    for r in result.keys():
+        if not result[r]:
+            result.pop(r)
+
     print
     print 'Round', '\t', 'State', '\t\t', 'Num', '\t', 'FlowSize'
     for r in result:
@@ -162,7 +169,7 @@ if __name__ == '__main__':
 
     complete_round_map = {}
     for fid in flowinfo:
-        complete_round_map[fid] = 0
+        complete_round_map[fid] = -1
 
     for r in result:
         if result[r].has_key('update'):
