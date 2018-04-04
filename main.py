@@ -171,9 +171,10 @@ if __name__ == '__main__':
 
     result = {}
     for r in tmp_result:
-        result[r] = []
-        for item in tmp_result[r]:
-            result[r].append(item)
+        if tmp_result[r]:
+            result[r] = []
+            for item in tmp_result[r]:
+                result[r].append(item)
 
     print
     print 'Round', '\t', 'State', '\t', 'Num', '\t', 'FlowSize'

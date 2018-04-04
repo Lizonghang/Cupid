@@ -27,7 +27,7 @@ def get_flowinfo(path='topo/flow_demand.txt'):
             items = map(lambda _: _.strip(), line.split(','))
             fid = int(items[0])
             bw = float(items[1])
-            flowinfo[fid] = bw
+            flowinfo[fid] = round(bw * 0.2, 2)
             line = fp.readline().strip()
     return flowinfo
 
