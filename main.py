@@ -19,7 +19,7 @@ if __name__ == '__main__':
             else:
                 transition_info[fid].update({nf: flowinfo[fid]})
 
-    tmp_result = {}
+    result = {}
     rest_nf = None
     shield = []
 
@@ -27,10 +27,14 @@ if __name__ == '__main__':
     while True:
         count += 1
         print 'Round', count
-        tmp_result[count] = []
+        result[count] = {}
 
         split_D = utils.split_dependency_graph(global_D)
+
         for D in split_D:
+
+            if not utils.get_all_nf(D):
+                continue
 
             US = []
 
@@ -89,11 +93,11 @@ if __name__ == '__main__':
 
             if US:
                 print US
-                tmp_result[count] += US
+                result[count]['update'] = US
 
             # random shield
             if not step1_flag and not step2_flag:
-                rest_nf = utils.get_all_nf(global_D)
+                rest_nf = utils.get_all_nf(D)
                 nf_dict = random.choice(rest_nf)
                 nf, fid = utils.dict2tuple(nf_dict)
 
@@ -102,61 +106,52 @@ if __name__ == '__main__':
                 shield.append((nf_dict, transition_info[fid][nf]))
 
                 print 'shield:', (nf_dict, transition_info[fid][nf])
-                tmp_result[count] = (nf_dict, transition_info[fid][nf])
+                result[count]['shield'] = [(nf_dict, transition_info[fid][nf])]
 
         if not global_D.nodes() or count >= MAX_ROUND:
             break
 
-    next_round = max(tmp_result.keys())+1
-    tmp_result[next_round] = {}
+    next_round = max(result.keys())+1
+    result[next_round] = {}
 
     if global_D.nodes():
-        tmp_result[next_round]['shield'] = []
+        result[next_round]['shield'] = []
         rest_nf = utils.get_all_nf(global_D)
         for nf_dict in rest_nf:
             utils.remove_nf(global_D, nf_dict)
             nf, fid = utils.dict2tuple(nf_dict)
             utils.remove_flow(G, fid, transition_info[fid][nf])
             shield.append((nf_dict, transition_info[fid][nf]))
-            tmp_result[next_round]['shield'].append((nf_dict, transition_info[fid][nf]))
+            result[next_round]['shield'].append((nf_dict, transition_info[fid][nf]))
 
         print 'Round', next_round
-        print 'shield:', tmp_result[next_round]['shield']
+        print 'shield:', result[next_round]['shield']
 
     if shield:
-        tmp_result[next_round]['recover'] = []
+        final_round = next_round + 1
+        result[final_round] = {'recover': []}
         for nf_dict, size in shield:
             nf, fid = utils.dict2tuple(nf_dict)
             utils.recover_flow(G, fid, size)
             transition_info[fid][nf] = round(transition_info[fid][nf] - size, 2)
-            tmp_result[next_round]['recover'].append((nf_dict, size))
+            result[final_round]['recover'].append((nf_dict, size))
 
         print 'Rocover'
         print shield
-
-    result = {}
-    for r in tmp_result:
-        result[r] = []
-        if type(tmp_result[r]) == list:
-            for item in tmp_result[r]:
-                result[r].append(item)
-        elif type(tmp_result[r]) == tuple:
-            result[r] = {'shield': tmp_result[r]}
-        elif type(tmp_result[r]) == dict:
-            result[r] = tmp_result[r]
 
     print
     print 'Round', '\t', 'State', '\t\t', 'Num', '\t', 'FlowSize'
     for r in result:
         print r, '\t',
-        if type(result[r]) == list:
-            print '\t\t', len(result[r]), '\t', sum([item[1] for item in result[r]])
-        elif type(result[r]) == dict:
-            if result[r].has_key('shield') and not result[r].has_key('recover'):
-                print 'shield', '\t\t', 1, '\t', result[r]['shield'][1]
-            elif result[r].has_key('shield') and result[r].has_key('recover'):
-                print 'shield', '\t\t', len(result[r]['shield']), '\t', sum([item[1] for item in result[r]['shield']])
-                print '\t', 'recover', '\t', len(result[r]['recover']), '\t', sum([item[1] for item in result[r]['recover']])
+        if result[r].has_key('update') and not result[r].has_key('shield'):
+            print '      ', '\t\t', len(result[r]['update']), '\t', sum([item[1] for item in result[r]['update']])
+        elif not result[r].has_key('update') and result[r].has_key('shield'):
+            print 'shield', '\t\t', len(result[r]['shield']), '\t', sum([item[1] for item in result[r]['shield']])
+        elif result[r].has_key('update') and result[r].has_key('shield'):
+            print '      ', '\t\t', len(result[r]['update']), '\t', sum([item[1] for item in result[r]['update']])
+            print '\t', 'shield', '\t\t', len(result[r]['shield']), '\t', sum([item[1] for item in result[r]['shield']])
+        elif result[r].has_key('recover'):
+            print 'recover', '\t', len(result[r]['recover']), '\t', sum([item[1] for item in result[r]['recover']])
 
     print
     print 'update order:'
@@ -167,15 +162,14 @@ if __name__ == '__main__':
         complete_round_map[fid] = 0
 
     for r in result:
-        if type(result[r]) == list:
-            for nf_tup in result[r]:
+        if result[r].has_key('update'):
+            for nf_tup in result[r]['update']:
                 nf, fid = utils.dict2tuple(nf_tup[0])
                 complete_round_map[fid] = r
-        elif type(result[r]) == dict:
-            if result[r].has_key('recover'):
-                for item in result[r]['recover']:
-                    nf, fid = utils.dict2tuple(item[0])
-                    complete_round_map[fid] = r
+        elif result[r].has_key('recover'):
+            for item in result[r]['recover']:
+                nf, fid = utils.dict2tuple(item[0])
+                complete_round_map[fid] = r
 
     utils.save_complete_round(complete_round_map)
 
