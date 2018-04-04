@@ -10,7 +10,7 @@ if __name__ == '__main__':
     flowinfo = utils.get_flowinfo()
     CL = utils.search_potential_congested_links()
     global_D = utils.create_dependency_graph(utils.get_dependency(CL))
-    utils.update_alone_nodes(G, global_D)
+    init_update = utils.update_alone_nodes(G, global_D)
 
     transition_info = {}
     for CNid in global_D.nodes():
@@ -22,9 +22,11 @@ if __name__ == '__main__':
                 transition_info[fid].update({nf: flowinfo[fid]})
 
     tmp_result = {}
+    count = 0
     rest_nf = None
 
-    count = 0
+    tmp_result[count] = map(lambda nf_tup: (utils.tuple2dict(nf_tup), flowinfo[nf_tup[1]]), init_update)
+
     while True:
         count += 1
         print 'Round', count

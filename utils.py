@@ -405,12 +405,15 @@ def update_segment_without_moving_out(G, nf, fid, size):
 def update_alone_nodes(G, D):
     nodes_in_dependency_graph = get_nodes_in_dependency_graph(D)
     flowinfo = get_flowinfo()
+    update_record = []
     for fid in flowinfo:
         nodes = set(get_flow(fid, 'new') + get_flow(fid, 'old'))
         nodes = map(lambda nf: (nf, fid), nodes)
         nodes = filter(lambda nf: nf not in nodes_in_dependency_graph, nodes)
         for node in nodes:
             update_segment(G, node[0], node[1], flowinfo[fid])
+            update_record.append(node)
+    return update_record
 
 
 def can_update_in_segment(G, nf, fid, size):
