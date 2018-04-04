@@ -303,11 +303,13 @@ def remove_flow(G, fid, size):
 def update_alone_nodes(G, D):
     nodes_in_dependency_graph = get_nodes_in_dependency_graph(D)
     flowinfo = get_flowinfo()
+    init_update = []
     for fid in flowinfo:
         s = get_flow(fid, 'new')[0]
         if (s, fid) not in nodes_in_dependency_graph:
             update_segment(G, fid, flowinfo[fid])
-            print 'Round 0', fid
+            init_update.append((s, fid))
+    return init_update
 
 
 def can_update_in_segment(G, fid, size):
